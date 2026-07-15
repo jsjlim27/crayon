@@ -35,6 +35,8 @@ typedef struct Stroke {
         int start; // index to the stroke's beginning position residing in
                    // App.pool.points.
         int length;
+        float width;
+        SDL_Color color;
 } Stroke;
 
 typedef struct StrokeList {
@@ -47,6 +49,7 @@ typedef struct App {
         bool running;
         bool drawing;
         bool needs_redraw;
+        int redo_count;
 
         SDL_FPoint last_point;
 
@@ -58,13 +61,16 @@ typedef struct App {
 
         SDL_Color bg;        // canvas background color
         SDL_Color pen_color; // draw tool color
+
+        float width;
 } App;
 
 bool App_init(App *app)
 {
         app->running = true;
         app->drawing = false;
-        app->needs_redraw = false;
+        app->needs_redraw = true;
+        app->redo_count = 0;
 
         app->last_point.x = 0.0;
         app->last_point.y = 0.0;
@@ -92,6 +98,8 @@ bool App_init(App *app)
         app->pen_color.g = 211;
         app->pen_color.b = 255;
         app->pen_color.a = 255;
+
+        app->width = 4.0f;
 
         return true;
 }
@@ -142,7 +150,10 @@ void handle_event(SDL_Event *event, App *app)
 
                 case SDL_EVENT_MOUSE_BUTTON_DOWN: {
                         if (event->button.button == SDL_BUTTON_LEFT) {
+                                app->redo_count = 0;
+
                                 app->current_stroke.start = app->pool.count;
+                                app->current_stroke.width = app->width;
 
                                 SDL_FPoint p = { event->button.x, event->button.y };
                                 point_pool_add(&app->pool, p);
@@ -151,7 +162,27 @@ void handle_event(SDL_Event *event, App *app)
                                 app->drawing = true;
                                 app->needs_redraw = true;
                         } else if (event->button.button == SDL_BUTTON_X1) {
+                                /* UNDO */
+                                if (!app->drawing && app->stroke_list.count > 0) {
+                                        app->stroke_list.count--;
+                                        Stroke last = 
+                                                app->stroke_list.data[app->stroke_list.count];
+
+                                        app->pool.count = last.start;
+                                        app->redo_count++;
+                                        app->needs_redraw = true;
+                                }
                         } else if (event->button.button == SDL_BUTTON_X2) {
+                                /* REDO */
+                                if (!app->drawing && app->redo_count > 0) {
+                                        Stroke s = 
+                                                app->stroke_list.data[app->stroke_list.count];
+
+                                        app->pool.count = s.start + s.length;
+                                        app->stroke_list.count++;
+                                        app->redo_count--;
+                                        app->needs_redraw = true;
+                                }
                         }
                         break;
                 }
@@ -164,31 +195,77 @@ void handle_event(SDL_Event *event, App *app)
                                 stroke_list_add(&app->stroke_list, app->current_stroke);
 
                                 app->drawing = false;
+                                app->needs_redraw = true;
                         }
                         break;
                 }
 
                 case SDL_EVENT_MOUSE_MOTION: {
                         if (app->drawing) {
-                                SDL_FPoint p = { event->motion.x, event->motion.y };
-                                point_pool_add(&app->pool, p);
+                                SDL_FPoint p_start = app->last_point;
+                                SDL_FPoint p_end = { event->motion.x, event->motion.y };
 
-                                app->last_point = p;
+                                for (float t = 0; t < 1; t += 0.01) {
+                                        SDL_FPoint p;
+                                        p.x =  p_start.x + t * (p_end.x - p_start.x);
+                                        p.y =  p_start.y + t * (p_end.y - p_start.y);
+                                        point_pool_add(&app->pool, p);
+                                }
+
+                                app->last_point = p_end;
                                 app->needs_redraw = true;
                         }
                         break;
                 }
+
+                case SDL_EVENT_KEY_DOWN: {
+                        if (event->key.scancode == SDL_SCANCODE_F && !event->key.repeat) {
+                                app->redo_count = 0;
+
+                                app->current_stroke.start = app->pool.count;
+                                app->current_stroke.width = app->width;
+
+                                float x, y;
+                                SDL_GetMouseState(&x, &y);
+                                SDL_FPoint p = { x, y };
+                                point_pool_add(&app->pool, p);
+
+                                app->last_point = p;
+                                app->drawing = true;
+                                app->needs_redraw = true;
+                        }
+                        break;
+                }
+
+                case SDL_EVENT_KEY_UP: {
+                        if (event->key.scancode == SDL_SCANCODE_F) {
+                                app->current_stroke.length = 
+                                        app->pool.count - app->current_stroke.start;
+
+                                stroke_list_add(&app->stroke_list, app->current_stroke);
+
+                                app->drawing = false;
+                                app->needs_redraw = true;
+                        }
+                        break;
+                }
+
+                case SDL_EVENT_WINDOW_EXPOSED:
+                        fprintf(stderr, "EXPOSED\n");
+                        app->needs_redraw = true;
+                        break;
         }
 }
 
 /* simple render */
 void render(SDL_Renderer *renderer, App *app)
 {
+        SDL_Color c = { 60, 60, 76, 255 };
         SDL_SetRenderDrawColor(renderer, 
-                               app->bg.r, 
-                               app->bg.g, 
-                               app->bg.b, 
-                               app->bg.a);
+                               c.r,
+                               c.g,
+                               c.b,
+                               c.a);
 
         SDL_RenderClear(renderer);
 
@@ -198,33 +275,35 @@ void render(SDL_Renderer *renderer, App *app)
                                app->pen_color.b,
                                app->pen_color.a);
 
-        /* draw all the finished strokes */
+        // draw all the finished strokes
         for (int i = 0; i < app->stroke_list.count; i++) {
-                Stroke stroke = app->stroke_list.data[i];
-                int end = stroke.start + stroke.length;
-                for (int j = stroke.start; j < end; j++) {
+                Stroke s = app->stroke_list.data[i];
+                int end = s.start + s.length;
+                for (int j = s.start; j < end; j++) {
                         SDL_FRect rect;
-                        rect.x = app->pool.points[j].x;
-                        rect.y = app->pool.points[j].y;
-                        rect.w = 10.0;
-                        rect.h = 10.0;
-                        // know that rect will be drawn off side. fix later.
+                        rect.x = app->pool.points[j].x - s.width / 2;
+                        rect.y = app->pool.points[j].y - s.width / 2;
+                        rect.w = s.width;
+                        rect.h = s.width;
 
                         SDL_RenderFillRect(renderer, &rect);
                 }
         }
 
-        /* draw ongoing stroke */
+        // draw ongoing stroke
+        if (app->drawing) {
+        SDL_Color c = { 11, 218, 81, 255 };
+        SDL_SetRenderDrawColor(renderer, c.r, c.g, c.b, c.a);
         for (int i = app->current_stroke.start; i < app->pool.count; i++) 
         {
                 SDL_FRect rect;
-                rect.x = app->pool.points[i].x;
-                rect.y = app->pool.points[i].y;
-                rect.w = 10.0;
-                rect.h = 10.0;
-                // know that rect will be drawn off side. fix later.
+                rect.x = app->pool.points[i].x - app->current_stroke.width / 2;
+                rect.y = app->pool.points[i].y - app->current_stroke.width / 2;
+                rect.w = app->current_stroke.width;
+                rect.h = app->current_stroke.width;
 
                 SDL_RenderFillRect(renderer, &rect);
+        }
         }
         SDL_RenderPresent(renderer);
 }
@@ -236,7 +315,8 @@ int main()
                 return 1;
         }
 
-        SDL_Window *window = SDL_CreateWindow("wb", 1280, 720, 0);
+        SDL_Window *window = SDL_CreateWindow("wb", 1350, 1350, 0);
+        // SDL_Window *window = SDL_CreateWindow("wb", 800, 600, 0);
         if (window == NULL) {
                 fprintf(stderr, "%s\n", SDL_GetError());
                 return 1;
@@ -246,6 +326,10 @@ int main()
         if (renderer == NULL) {
                 fprintf(stderr, "%s\n", SDL_GetError());
                 return 1;
+        }
+
+        if (!SDL_SetRenderVSync(renderer, SDL_RENDERER_VSYNC_DISABLED)) {
+                fprintf(stderr, "%s\n", SDL_GetError());
         }
 
         App app;
@@ -259,20 +343,14 @@ int main()
                 while (SDL_PollEvent(&event)) {
                         handle_event(&event, &app);
                 }
-                render(renderer, &app);
-                /*
-                Sint32 wait_ms = app.needs_redraw ? 0 : -1;
-
-                if (SDL_WaitEventTimeout(&event, wait_ms)) {
-                        handle_event(&event, &app);
-                }
-
                 if (app.needs_redraw) {
+                        static int redraw_count = 0;
+                        fprintf(stderr, "%i: re-drawing...\n", redraw_count++);
+                        fprintf(stderr, "pool count: %i\n", app.pool.count);
+                        fprintf(stderr, "pool cap  : %i\n", app.pool.cap);
                         render(renderer, &app);
                         app.needs_redraw = false;
-                        // last_render = now;
                 }
-                */
         }
 
         return 0;
