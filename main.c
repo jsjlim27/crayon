@@ -1,9 +1,8 @@
 #include <SDL3/SDL.h>
 
-#include <stdio.h>   /* fprintf  */
-#include <stdbool.h> /* bool     */
-#include <stdlib.h>  /* size_t   */
-#include <stdint.h>  /* uint64_t */
+#include <stdio.h>   /* fprintf */
+#include <stdbool.h> /* bool */
+#include <stdlib.h>  /* malloc, realloc, free */
 
 /*
 typedef enum {
@@ -24,6 +23,9 @@ typedef struct Drawable {
 */
 
 /* Record of every user-drawn mouse position. */
+/* boop */
+/* bop */
+/* beep */
 typedef struct PointPool  {
         SDL_FPoint *points; // lives in the heap so it can grow.
         int count;
@@ -67,6 +69,7 @@ typedef struct App {
 
 bool App_init(App *app)
 {
+        // welp whut
         app->running = true;
         app->drawing = false;
         app->needs_redraw = true;
@@ -99,7 +102,7 @@ bool App_init(App *app)
         app->pen_color.b = 255;
         app->pen_color.a = 255;
 
-        app->width = 4.0f;
+        app->width = 10.0f;
 
         return true;
 }
@@ -121,6 +124,18 @@ bool point_pool_add(PointPool *pool, SDL_FPoint p)
         pool->points[pool->count++] = p;
         return true;
 }
+
+/*
+bool point_pool_add_segment(PointPool *pool, SDL_FPoint a, SDL_FPoint b)
+{
+
+        for (int i = ; ; i++) {
+                SDL_FPoint p;
+                p.x = a.x + i * (b.x - a.x);
+                point_pool_add(pool, p);
+        }
+}
+*/
 
 bool stroke_list_add(StrokeList *list, Stroke s)
 {
@@ -202,24 +217,31 @@ void handle_event(SDL_Event *event, App *app)
 
                 case SDL_EVENT_MOUSE_MOTION: {
                         if (app->drawing) {
-                                SDL_FPoint p_start = app->last_point;
-                                SDL_FPoint p_end = { event->motion.x, event->motion.y };
+                                SDL_FPoint a = app->last_point;
+                                SDL_FPoint b = { event->motion.x, event->motion.y };
 
-                                for (float t = 0; t < 1; t += 0.01) {
+                                // fixed-pixel-spacing linear interpolation
+                                int spacing = 2; // in pixels
+                                float dist = SDL_sqrtf( (b.x - a.x) * (b.x - a.x) + (b.y - a.y) * (b.y - a.y) );
+                                int n = dist / spacing;
+
+                                for (int i = 0; i < n - 1; i++) {
                                         SDL_FPoint p;
-                                        p.x =  p_start.x + t * (p_end.x - p_start.x);
-                                        p.y =  p_start.y + t * (p_end.y - p_start.y);
+                                        p.x = a.x + (b.x - a.x) / n * (i + 1);
+                                        p.y = a.y + (b.y - a.y) / n * (i + 1);
                                         point_pool_add(&app->pool, p);
                                 }
-
-                                app->last_point = p_end;
+                                point_pool_add(&app->pool, b);
+                                 
+                                app->last_point = b;
                                 app->needs_redraw = true;
                         }
                         break;
                 }
 
-                case SDL_EVENT_KEY_DOWN: {
-                        if (event->key.scancode == SDL_SCANCODE_F && !event->key.repeat) {
+                case SDL_EVENT_KEY_DOWN: //{
+                        /*
+                        if (event->key.scancode == SDL_SCANCODE_F && !event->key.repeat && !app->drawing) {
                                 app->redo_count = 0;
 
                                 app->current_stroke.start = app->pool.count;
@@ -234,21 +256,17 @@ void handle_event(SDL_Event *event, App *app)
                                 app->drawing = true;
                                 app->needs_redraw = true;
                         }
+                        */
                         break;
-                }
+                //}
 
-                case SDL_EVENT_KEY_UP: {
+                case SDL_EVENT_KEY_UP: //{
+                        /*
                         if (event->key.scancode == SDL_SCANCODE_F) {
-                                app->current_stroke.length = 
-                                        app->pool.count - app->current_stroke.start;
-
-                                stroke_list_add(&app->stroke_list, app->current_stroke);
-
-                                app->drawing = false;
-                                app->needs_redraw = true;
                         }
+                        */
                         break;
-                }
+                //}
 
                 case SDL_EVENT_WINDOW_EXPOSED:
                         fprintf(stderr, "EXPOSED\n");
