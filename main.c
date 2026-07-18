@@ -405,6 +405,31 @@ int main()
         while (app.running) {
                 while (SDL_PollEvent(&event)) {
                         handle_event(&event, &app);
+                        /*
+                        switch (event.type) {
+                                case SDL_EVENT_PEN_DOWN:
+                                        fprintf(stderr, "pen down\n");
+                                        break;
+                                case SDL_EVENT_PEN_UP:
+                                        fprintf(stderr, "pen up\n");
+                                        break;
+                                case SDL_EVENT_PEN_MOTION:
+                                        fprintf(stderr, "pen motion\n");
+                                        break;
+                                case SDL_EVENT_PEN_AXIS:
+                                        fprintf(stderr, "pen axis\n");
+                                        break;
+                                case SDL_EVENT_MOUSE_BUTTON_DOWN:
+                                        fprintf(stderr, "mouse button down\n");
+                                        break;
+                                case SDL_EVENT_MOUSE_BUTTON_UP:
+                                        fprintf(stderr, "mouse button up\n");
+                                        break;
+                                case SDL_EVENT_MOUSE_MOTION:
+                                        fprintf(stderr, "mouse motion\n");
+                                        break;
+                        }
+                        */
                 }
                 if (app.redraw) {
                         /*
