@@ -1,3 +1,10 @@
+/*
+ * TODO:
+ * [] file
+ *      [] save session to file
+ * [] cursor
+ * [] circle brush
+ */
 #include <SDL3/SDL.h>
 
 #include <stdio.h>   /* fprintf */
@@ -77,18 +84,35 @@ static bool app_init(App *app)
         app->stroke_list.count = 0;
         app->stroke_list.cap = 16384;
 
-        app->bg_color.r = 0;
-        app->bg_color.g = 0;
-        app->bg_color.b = 0;
+        /* white bg */
+        app->bg_color.r = 255;
+        app->bg_color.g = 255;
+        app->bg_color.b = 255;
         app->bg_color.a = 255;
 
         app->brush_type = BRUSH_RECT;
 
+        /* green (from krita) */
+        /*
+        app->brush_color.r = 0;
+        app->brush_color.g = 255;
+        app->brush_color.b = 41;
+        app->brush_color.a = 255;
+        */
+
+        /* black */
+        app->brush_color.r = 0;
+        app->brush_color.g = 0;
+        app->brush_color.b = 0;
+        app->brush_color.a = 255;
+
         /* lavender */
+        /*
         app->brush_color.r = 211;
         app->brush_color.g = 211;
         app->brush_color.b = 255;
         app->brush_color.a = 255;
+        */
 
         app->brush_width = 10.0f;
 
@@ -360,8 +384,21 @@ int main()
         App app;
         if (!app_init(&app)) {
                 // print err
+                fprintf(stderr, "app_init failed! Exiting..\n");
                 return 1;
         }
+
+        /* EXPERIMENTAL: CRAYON CURSOR ******************************* START */
+        /*
+        SDL_Surface *surf = 
+                SDL_CreateSurface(32, 32, SDL_PIXELFORMAT_RGBA32);
+        fprintf(stderr, "bits-per-pixel: %d\n", SDL_BITSPERPIXEL(SDL_PIXELFORMAT_RGBA32));
+        fprintf(stderr, "bytes-per-pixel: %d\n", SDL_BYTESPERPIXEL(SDL_PIXELFORMAT_RGBA32));
+        fprintf(stderr, "pitch: %d\n", surf->pitch);
+        fprintf(stderr, "pitch/width: %d\n", surf->pitch/surf->w);
+        */
+        /* EXPERIMENTAL: CRAYON CURSOR *******************************   END */
+
 
         SDL_Event event;
         while (app.running) {
