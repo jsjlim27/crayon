@@ -114,7 +114,7 @@ static bool app_init(App *app)
         app->brush_color.a = 255;
         */
 
-        app->brush_width = 10.0f;
+        app->brush_width = 5.0f;
 
         app->stroke_input = INPUT_NONE;
 
@@ -209,7 +209,7 @@ static void app_stroke_begin(App *app, SDL_FPoint p, StrokeInput from)
 static void app_stroke_extend(App *app, SDL_FPoint p)
 {
         if (!app->drawing) { return; }
-        point_pool_add_segment(&app->pool, app->last_point, p, 2.0f);
+        point_pool_add_segment(&app->pool, app->last_point, p, 1.0f);
         app->last_point = p;
         app->redraw = true;
 }
@@ -365,7 +365,8 @@ int main()
                 return 1;
         }
 
-        SDL_Window *window = SDL_CreateWindow("wb", 2200, 1400, 0);
+        // SDL_Window *window = SDL_CreateWindow("wb", 2200, 1400, 0);
+        SDL_Window *window = SDL_CreateWindow("wb", 1920, 1080, SDL_WINDOW_FULLSCREEN);
         if (window == NULL) {
                 fprintf(stderr, "%s\n", SDL_GetError());
                 return 1;
