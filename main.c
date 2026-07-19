@@ -10,6 +10,7 @@
 #include <stdio.h>   /* fprintf */
 #include <stdbool.h> /* bool */
 #include <stdlib.h>  /* malloc, realloc, free */
+#include <time.h>    /* for timestamping session saves  */
 
 /* enums */
 typedef enum { BRUSH_RECT, BRUSH_CIRCLE, BRUSH_COUNT } BrushType;
@@ -38,7 +39,11 @@ typedef struct StrokeList {
         int cap;
 } StrokeList;
 
+/* THE GOD STRUCT */
 typedef struct App {
+        SDL_Renderer *renderer;
+
+        bool focused;
         bool running;
         bool drawing;
         bool redraw;
@@ -58,11 +63,52 @@ typedef struct App {
 
         StrokeInput stroke_input; // for distinguishing between inputs 
                                   // (e.g., INPUT_MOUSE or INPUT_KEY).
+
+        SDL_Texture *circle_texture;
 } App;
 
 /* functions */
+static float dist_squared(SDL_FPoint a, SDL_FPoint b)
+{
+        float dx = b.x - a.x;
+        float dy = b.y - a.y;
+
+        return dx * dx + dy * dy;
+}
+
+static SDL_Surface *make_circle(void)
+{
+        int w = 1000;
+        int h = 1000;
+
+        SDL_Surface *surf = SDL_CreateSurface(w, h, SDL_PIXELFORMAT_RGBA32);
+
+        SDL_Color *pixels = surf->pixels;
+        SDL_FPoint center = { w / 2.0f, h / 2.0f };
+        float r = w / 2.0f;
+
+        for (int y = 0; y < h; y++) {
+                for (int x = 0; x < w; x++) {
+                        pixels[w * y + x].r = 0;
+                        pixels[w * y + x].g = 0;
+                        pixels[w * y + x].b = 0;
+
+                        SDL_FPoint p = { x, y };
+                        if (dist_squared(p, center) > r * r) {
+                                pixels[w * y + x].a = 0;
+                        } else {
+                                pixels[w * y + x].a = 255;
+                        }
+                }
+        }
+        return surf;
+}
+
 static bool app_init(App *app)
 {
+        app->renderer = NULL;
+
+        app->focused = true;
         app->running = true;
         app->drawing = false;
         app->redraw = true;
@@ -114,10 +160,11 @@ static bool app_init(App *app)
         app->brush_color.a = 255;
         */
 
-        app->brush_width = 5.0f;
+        app->brush_width = 6.0f;
 
         app->stroke_input = INPUT_NONE;
 
+        app->circle_texture = NULL;
         return true;
 }
 
@@ -310,8 +357,16 @@ static void handle_event(SDL_Event *event, App *app)
                 break;
         }
         case SDL_EVENT_WINDOW_EXPOSED:
-                // fprintf(stderr, "EXPOSED\n");
+                fprintf(stderr, "WINDOW EXPOSED\n");
                 app->redraw = true;
+                break;
+        case SDL_EVENT_WINDOW_FOCUS_GAINED:
+                fprintf(stderr, "WINDOW FOCUS GAINED\n");
+                app->focused = true;
+                break;
+        case SDL_EVENT_WINDOW_FOCUS_LOST:
+                fprintf(stderr, "WINDOW FOCUS LOST\n");
+                app->focused = false;
                 break;
         }
 }
@@ -334,39 +389,60 @@ static void draw_stroke(SDL_Renderer *r, const Stroke *s, const SDL_FPoint *p)
         }
 }
 
-/* simple render */
-static void render(SDL_Renderer *renderer, App *app)
+static void draw_stroke_circle(SDL_Renderer *r, SDL_Texture *t, 
+                               const Stroke *s, const SDL_FPoint *p)
 {
-        SDL_SetRenderDrawColor(renderer, 
+        int end = s->start + s->length;
+        float half = s->width / 2;
+
+        for (int i = s->start; i < end; i++) {
+                SDL_FRect rect = { p[i].x - half, p[i].y - half,
+                                        s->width,      s->width  };
+                SDL_RenderTexture(r, t, NULL, &rect);
+        }
+}
+
+/* simple render */
+static void render(App *app)
+{
+        SDL_SetRenderDrawColor(app->renderer, 
                                app->bg_color.r,
                                app->bg_color.g,
                                app->bg_color.b,
                                app->bg_color.a);
-        SDL_RenderClear(renderer);
+
+        SDL_RenderClear(app->renderer);
 
         // draw all the finished strokes
         for (int i = 0; i < app->stroke_list.count; i++) {
-                draw_stroke(renderer, &app->stroke_list.data[i], app->pool.points);
+                // draw_stroke(renderer, &app->stroke_list.data[i], app->pool.points);
+                draw_stroke_circle(app->renderer, 
+                                   app->circle_texture, 
+                                   &app->stroke_list.data[i], 
+                                   app->pool.points);
         }
 
         // draw ongoing stroke
         if (app->drawing) {
                 Stroke live = app->current_stroke;
                 live.length = app->pool.count - live.start;
-                draw_stroke(renderer, &live, app->pool.points);
+                // draw_stroke(renderer, &live, app->pool.points);
+                draw_stroke_circle(app->renderer, 
+                                   app->circle_texture, 
+                                   &live, 
+                                   app->pool.points);
         }
-        SDL_RenderPresent(renderer);
+        SDL_RenderPresent(app->renderer);
 }
 
-int main()
+int main(int argc, char *argv[])
 {
         if (!SDL_Init(SDL_INIT_VIDEO)) {
                 fprintf(stderr, "%s\n", SDL_GetError());
                 return 1;
         }
 
-        // SDL_Window *window = SDL_CreateWindow("wb", 2200, 1400, 0);
-        SDL_Window *window = SDL_CreateWindow("wb", 1920, 1080, SDL_WINDOW_FULLSCREEN);
+        SDL_Window *window = SDL_CreateWindow("draw", 1920, 1080, SDL_WINDOW_FULLSCREEN);
         if (window == NULL) {
                 fprintf(stderr, "%s\n", SDL_GetError());
                 return 1;
@@ -382,12 +458,22 @@ int main()
                 fprintf(stderr, "%s\n", SDL_GetError());
         }
 
+        SDL_Surface *surf = make_circle();
+        SDL_Texture *circle_texture = SDL_CreateTextureFromSurface(renderer, surf);
+        SDL_DestroySurface(surf);
+
         App app;
         if (!app_init(&app)) {
                 // print err
                 fprintf(stderr, "app_init failed! Exiting..\n");
                 return 1;
         }
+        app.renderer = renderer;
+        app.circle_texture = circle_texture;
+
+        //SDL_Surface *surf = make_circle();
+        //SDL_Texture *circle_texture = SDL_CreateTextureFromSurface(renderer, surf);
+        // free(surf);
 
         /* EXPERIMENTAL: CRAYON CURSOR ******************************* START */
         /*
@@ -400,9 +486,9 @@ int main()
         */
         /* EXPERIMENTAL: CRAYON CURSOR *******************************   END */
 
-
         SDL_Event event;
         while (app.running) {
+                if (app.focused) {
                 while (SDL_PollEvent(&event)) {
                         handle_event(&event, &app);
                         /*
@@ -431,6 +517,10 @@ int main()
                         }
                         */
                 }
+                } else {
+                        SDL_WaitEvent(&event);
+                        handle_event(&event, &app);
+                }
                 if (app.redraw) {
                         /*
                         static int redraw_count = 0;
@@ -439,11 +529,10 @@ int main()
                         fprintf(stderr, "pool cap  : %i\n", app.pool.cap);
                         fprintf(stderr, "app.current_stroke.width: %f\n", app.current_stroke.width);
                         */
-                        render(renderer, &app);
+                        render(&app);
                         app.redraw = false;
                 }
         }
 
         return 0;
 }
-
