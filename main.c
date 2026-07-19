@@ -357,15 +357,15 @@ static void handle_event(SDL_Event *event, App *app)
                 break;
         }
         case SDL_EVENT_WINDOW_EXPOSED:
-                fprintf(stderr, "WINDOW EXPOSED\n");
+                //fprintf(stderr, "WINDOW EXPOSED\n");
                 app->redraw = true;
                 break;
         case SDL_EVENT_WINDOW_FOCUS_GAINED:
-                fprintf(stderr, "WINDOW FOCUS GAINED\n");
+                //fprintf(stderr, "WINDOW FOCUS GAINED\n");
                 app->focused = true;
                 break;
         case SDL_EVENT_WINDOW_FOCUS_LOST:
-                fprintf(stderr, "WINDOW FOCUS LOST\n");
+                //fprintf(stderr, "WINDOW FOCUS LOST\n");
                 app->focused = false;
                 break;
         }
@@ -460,6 +460,8 @@ int main(int argc, char *argv[])
 
         SDL_Surface *surf = make_circle();
         SDL_Texture *circle_texture = SDL_CreateTextureFromSurface(renderer, surf);
+        SDL_SetTextureScaleMode(circle_texture, SDL_SCALEMODE_LINEAR);
+        SDL_SetTextureBlendMode(circle_texture, SDL_BLENDMODE_BLEND);
         SDL_DestroySurface(surf);
 
         App app;
@@ -471,55 +473,18 @@ int main(int argc, char *argv[])
         app.renderer = renderer;
         app.circle_texture = circle_texture;
 
-        //SDL_Surface *surf = make_circle();
-        //SDL_Texture *circle_texture = SDL_CreateTextureFromSurface(renderer, surf);
-        // free(surf);
-
-        /* EXPERIMENTAL: CRAYON CURSOR ******************************* START */
-        /*
-        SDL_Surface *surf = 
-                SDL_CreateSurface(32, 32, SDL_PIXELFORMAT_RGBA32);
-        fprintf(stderr, "bits-per-pixel: %d\n", SDL_BITSPERPIXEL(SDL_PIXELFORMAT_RGBA32));
-        fprintf(stderr, "bytes-per-pixel: %d\n", SDL_BYTESPERPIXEL(SDL_PIXELFORMAT_RGBA32));
-        fprintf(stderr, "pitch: %d\n", surf->pitch);
-        fprintf(stderr, "pitch/width: %d\n", surf->pitch/surf->w);
-        */
-        /* EXPERIMENTAL: CRAYON CURSOR *******************************   END */
-
         SDL_Event event;
         while (app.running) {
-                if (app.focused) {
-                while (SDL_PollEvent(&event)) {
-                        handle_event(&event, &app);
-                        /*
-                        switch (event.type) {
-                                case SDL_EVENT_PEN_DOWN:
-                                        fprintf(stderr, "pen down\n");
-                                        break;
-                                case SDL_EVENT_PEN_UP:
-                                        fprintf(stderr, "pen up\n");
-                                        break;
-                                case SDL_EVENT_PEN_MOTION:
-                                        fprintf(stderr, "pen motion\n");
-                                        break;
-                                case SDL_EVENT_PEN_AXIS:
-                                        fprintf(stderr, "pen axis\n");
-                                        break;
-                                case SDL_EVENT_MOUSE_BUTTON_DOWN:
-                                        fprintf(stderr, "mouse button down\n");
-                                        break;
-                                case SDL_EVENT_MOUSE_BUTTON_UP:
-                                        fprintf(stderr, "mouse button up\n");
-                                        break;
-                                case SDL_EVENT_MOUSE_MOTION:
-                                        fprintf(stderr, "mouse motion\n");
-                                        break;
+                if (app.drawing) {
+                        while (SDL_PollEvent(&event)) {
+                                handle_event(&event, &app);
                         }
-                        */
-                }
                 } else {
                         SDL_WaitEvent(&event);
                         handle_event(&event, &app);
+                        while (SDL_PollEvent(&event)) {
+                                handle_event(&event, &app);
+                        }
                 }
                 if (app.redraw) {
                         /*
