@@ -78,8 +78,8 @@ static float dist_squared(SDL_FPoint a, SDL_FPoint b)
 
 static SDL_Surface *make_circle(void)
 {
-        int w = 1000;
-        int h = 1000;
+        int w = 256;
+        int h = 256;
 
         SDL_Surface *surf = SDL_CreateSurface(w, h, SDL_PIXELFORMAT_RGBA32);
 
@@ -94,10 +94,11 @@ static SDL_Surface *make_circle(void)
                         pixels[w * y + x].b = 0;
 
                         SDL_FPoint p = { x, y };
-                        if (dist_squared(p, center) > r * r) {
+                        float dist2 = dist_squared(p, center);
+                        if (dist2 > r * r) {
                                 pixels[w * y + x].a = 0;
                         } else {
-                                pixels[w * y + x].a = 255;
+                                pixels[w * y + x].a = (Uint8)(255.0f - dist2 / (r * r) * 255.0f);
                         }
                 }
         }
@@ -475,16 +476,13 @@ int main(int argc, char *argv[])
 
         SDL_Event event;
         while (app.running) {
-                if (app.drawing) {
+                if (app.focused) {
                         while (SDL_PollEvent(&event)) {
                                 handle_event(&event, &app);
                         }
                 } else {
                         SDL_WaitEvent(&event);
                         handle_event(&event, &app);
-                        while (SDL_PollEvent(&event)) {
-                                handle_event(&event, &app);
-                        }
                 }
                 if (app.redraw) {
                         /*
