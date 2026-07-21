@@ -76,12 +76,13 @@ static float dist_squared(SDL_FPoint a, SDL_FPoint b)
         return dx * dx + dy * dy;
 }
 
-static SDL_Surface *make_circle(void)
+static SDL_Surface *create_surface_circle(SDL_Color c)
 {
-        int w = 256;
-        int h = 256;
+        const int w = 256;
+        const int h = 256;
 
         SDL_Surface *surf = SDL_CreateSurface(w, h, SDL_PIXELFORMAT_RGBA32);
+        if (surf == NULL) { return NULL; }
 
         SDL_Color *pixels = surf->pixels;
         SDL_FPoint center = { w / 2.0f, h / 2.0f };
@@ -89,9 +90,9 @@ static SDL_Surface *make_circle(void)
 
         for (int y = 0; y < h; y++) {
                 for (int x = 0; x < w; x++) {
-                        pixels[w * y + x].r = 0;
-                        pixels[w * y + x].g = 0;
-                        pixels[w * y + x].b = 0;
+                        pixels[w * y + x].r = c.r;
+                        pixels[w * y + x].g = c.g;
+                        pixels[w * y + x].b = c.b;
 
                         SDL_FPoint p = { x, y };
                         float dist2 = dist_squared(p, center);
@@ -132,9 +133,17 @@ static bool app_init(App *app)
         app->stroke_list.cap = 16384;
 
         /* white bg */
+        /*
         app->bg_color.r = 255;
         app->bg_color.g = 255;
         app->bg_color.b = 255;
+        app->bg_color.a = 255;
+        */
+
+        /* black bg */
+        app->bg_color.r = 0;
+        app->bg_color.g = 0;
+        app->bg_color.b = 0;
         app->bg_color.a = 255;
 
         app->brush_type = BRUSH_RECT;
@@ -148,9 +157,17 @@ static bool app_init(App *app)
         */
 
         /* black */
+        /*
         app->brush_color.r = 0;
         app->brush_color.g = 0;
         app->brush_color.b = 0;
+        app->brush_color.a = 255;
+        */
+
+        /* white */
+        app->brush_color.r = 255;
+        app->brush_color.g = 255;
+        app->brush_color.b = 255;
         app->brush_color.a = 255;
 
         /* lavender */
@@ -459,18 +476,19 @@ int main(int argc, char *argv[])
                 fprintf(stderr, "%s\n", SDL_GetError());
         }
 
-        SDL_Surface *surf = make_circle();
-        SDL_Texture *circle_texture = SDL_CreateTextureFromSurface(renderer, surf);
-        SDL_SetTextureScaleMode(circle_texture, SDL_SCALEMODE_LINEAR);
-        SDL_SetTextureBlendMode(circle_texture, SDL_BLENDMODE_BLEND);
-        SDL_DestroySurface(surf);
-
         App app;
         if (!app_init(&app)) {
                 // print err
                 fprintf(stderr, "app_init failed! Exiting..\n");
                 return 1;
         }
+
+        SDL_Surface *surf = create_surface_circle(app.brush_color);
+        SDL_Texture *circle_texture = SDL_CreateTextureFromSurface(renderer, surf);
+        SDL_SetTextureScaleMode(circle_texture, SDL_SCALEMODE_LINEAR);
+        SDL_SetTextureBlendMode(circle_texture, SDL_BLENDMODE_BLEND);
+        SDL_DestroySurface(surf);
+
         app.renderer = renderer;
         app.circle_texture = circle_texture;
 
