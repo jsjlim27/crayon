@@ -67,7 +67,15 @@ typedef struct App {
         SDL_Texture *circle_texture;
 } App;
 
-/* functions */
+/****************** functions *******************/
+/*
+ * Name       : dist_squared
+ * Description: Calculate the square of the distance between points a and b.
+ * 
+ * Pre-condition  : none
+ * Post-condition : Returns square distance between a and b.
+ *
+ */
 static float dist_squared(SDL_FPoint a, SDL_FPoint b)
 {
         float dx = b.x - a.x;
@@ -76,6 +84,12 @@ static float dist_squared(SDL_FPoint a, SDL_FPoint b)
         return dx * dx + dy * dy;
 }
 
+/*
+ * Name: create_surface_circle
+ * Description: Returns a SDL Surface that represents a circle.
+ *  
+ *
+ */
 static SDL_Surface *create_surface_circle(SDL_Color c)
 {
         const int w = 256;
