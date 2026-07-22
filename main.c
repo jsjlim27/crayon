@@ -460,7 +460,8 @@ int main(int argc, char *argv[])
                 return 1;
         }
 
-        SDL_Window *window = SDL_CreateWindow("draw", 1920, 1080, SDL_WINDOW_FULLSCREEN);
+        SDL_WindowFlags window_flags = SDL_WINDOW_RESIZABLE;
+        SDL_Window *window = SDL_CreateWindow("draw", 1920, 1080, window_flags);
         if (window == NULL) {
                 fprintf(stderr, "%s\n", SDL_GetError());
                 return 1;
