@@ -52,7 +52,7 @@ typedef struct {
 
         SDL_Window *window;
         SDL_Renderer *renderer;
-        SDL_Texture *circle_texture;
+        SDL_Texture *circle_brush_texture;
 
         SDL_FPoint position_offset;
 
@@ -99,54 +99,44 @@ static SDL_FPoint world_to_screen(SDL_FPoint offset, SDL_FPoint p)
  * Post-condition : Returns square distance between a and b.
  *
  */
-static float dist_squared(SDL_FPoint a, SDL_FPoint b)
+static float dist_squared(SDL_FPoint p1, SDL_FPoint p2)
 {
-        float dx = b.x - a.x;
-        float dy = b.y - a.y;
+        float dx = p2.x - p1.x;
+        float dy = p2.y - p1.y;
 
         return dx * dx + dy * dy;
 }
 
-/*
- * Name: create_surface_circle
- * Description: Returns a SDL Surface that represents a circle.
- *
- */
-static SDL_Surface *create_surface_circle(SDL_Color c)
+static bool rasterize_circle(SDL_Surface *surf)
 {
-        const int w = 256;
-        const int h = 256;
+        if (surf->w != surf->h) { 
+                fprintf(stderr, "Error: Surface width and height must match!\n");
+                return false; 
+        }
 
-        SDL_Surface *surf = SDL_CreateSurface(w, h, SDL_PIXELFORMAT_RGBA32);
-        if (surf == NULL) { return NULL; }
+        Uint32 *pixels = surf->pixels;
+        SDL_FPoint p_center = { .x = surf->w / 2.0f, .y = surf->h / 2.0f };
+        float rr = 0.25f * surf->w * surf->w;
 
-        SDL_Color *pixels = surf->pixels;
-        SDL_FPoint center = { w / 2.0f, h / 2.0f };
-        float r = w / 2.0f;
-
-        for (int y = 0; y < h; y++) {
-                for (int x = 0; x < w; x++) {
-                        pixels[w * y + x].r = c.r;
-                        pixels[w * y + x].g = c.g;
-                        pixels[w * y + x].b = c.b;
-
-                        SDL_FPoint p = { x, y };
-                        float dist2 = dist_squared(p, center);
-                        if (dist2 > r * r) {
-                                pixels[w * y + x].a = 0;
+        for (int y = 0; y < surf->h; y++) {
+                for (int x = 0; x < surf->w; x++) {
+                        SDL_FPoint p = { .x = x + 0.5f, .y = y + 0.5f };
+                        float dd = dist_squared(p, p_center);
+                        Uint8 alpha;
+                        if (dd > rr) {
+                                alpha = 0x00;
                         } else {
-                                pixels[w * y + x].a = (Uint8)(255.0f - dist2 / (r * r) * 255.0f);
+                                alpha = (Uint8)(255.0f - dd / rr * 255.0f);
                         }
+                        pixels[y * surf->w + x] = 
+                                SDL_MapSurfaceRGBA(surf, 0xFF, 0xFF, 0xFF, alpha);
                 }
         }
-        return surf;
+        return true;
 }
 
 static bool app_init(App *app)
 {
-        app->window = NULL;
-        app->renderer = NULL;
-
         app->panning = false;
         app->position_offset.x = 0.0f;
         app->position_offset.y = 0.0f;
@@ -219,11 +209,10 @@ static bool app_init(App *app)
         app->brush_color.a = 255;
         */
 
-        app->brush_width = 10.0f;
+        app->brush_width = 16.0f;
 
         app->stroke_input = INPUT_NONE;
 
-        app->circle_texture = NULL;
         return true;
 }
 
@@ -357,8 +346,8 @@ static void app_brush_resize(App *app, float delta)
         if (app->brush_width < 1.0f) {
                 app->brush_width = 1.0f;
         }
-        if (app->brush_width > 64.0f) {
-                app->brush_width = 64.0f;
+        if (app->brush_width > 128.0f) {
+                app->brush_width = 128.0f;
         }
 }
 
@@ -387,39 +376,6 @@ static void app_panning_end(App *app)
         app->redraw = true;
 }
 
-/*
- * for color selection feature later
-static UiRegion region_at_point(SDL_FPoint p, App *app)
-{
-        SDL_FRect palette = { .x = 0.0f, 
-                              .y = 0.0f, 
-                              .w = 0.1f * app->window_size.x, 
-                              .h = app->window_size.y };
-
-        //SDL_FRect canvas = { .x = 0.0f, .y = 0.0f, .w = window_w, .h = window_h };
-
-        if (SDL_PointInRectFloat(&p, &palette)) {
-                fprintf(stderr, "p in palette\n");
-                return REGION_PALETTE;
-        }
-
-        return REGION_CANVAS;
-}
-
-static void app_select_brush_color(App *app, SDL_FPoint p)
-{
-        if (p.y > 0.0f && p.y < app->window_size.y / 2.0f) {
-                // pretty red
-                app->brush_color = 
-                        (SDL_Color){ .r = 0xFF, .g = 0x70, .b = 0x81, .a = 0xFF };
-        } else {
-                // white
-                app->brush_color = 
-                        (SDL_Color){ .r = 0xFF, .g = 0xFF, .b = 0xFF, .a = 0xFF };
-        }
-}
-*/
-
 /* only job should be handling inputs, no rendering */
 static void handle_event(SDL_Event *event, App *app)
 {
@@ -435,17 +391,6 @@ static void handle_event(SDL_Event *event, App *app)
                 case SDL_BUTTON_LEFT:
                         app_stroke_begin(app, p, INPUT_MOUSE);
                         break;
-                        /*
-                        switch(region_at_point(p, app)) {
-                        case REGION_PALETTE:
-                                app_select_brush_color(app, p);
-                                break;
-                        case REGION_CANVAS:
-                                app_stroke_begin(app, p, INPUT_MOUSE);
-                                break;
-                        }
-                        break;
-                        */
                 case SDL_BUTTON_X1:
                         app_stroke_undo(app);
                         break;
@@ -539,26 +484,26 @@ static void handle_event(SDL_Event *event, App *app)
         }
 }
 
-static void draw_stroke(SDL_Renderer     *r, 
-                        SDL_Texture      *t, 
-                        const Stroke     *s, 
-                        const SDL_FPoint *p,
+static void draw_stroke(SDL_Renderer     *rend, 
+                        SDL_Texture      *tex, 
+                        const Stroke     *stroke, 
+                        const SDL_FPoint *pool,
                         SDL_FPoint       offset)
 {
         // tint the brush texture with stroke's color
         //SDL_SetTextureColorMod(t, s->color.r, s->color.g, s->color.b);
 
-        int end = s->start + s->length;
-        float half = s->width / 2;
+        int end = stroke->start + stroke->length;
+        float half = stroke->width / 2;
 
-        for (int i = s->start; i < end; i++) {
-                SDL_FPoint pos = world_to_screen(offset, p[i]);
-                SDL_FRect rect = { .x = pos.x - half,
-                                   .y = pos.y - half,
-                                   .w = s->width,
-                                   .h = s->width };
+        for (int i = stroke->start; i < end; i++) {
+                SDL_FPoint p = world_to_screen(offset, pool[i]);
+                SDL_FRect rect = { .x = p.x - half,
+                                   .y = p.y - half,
+                                   .w = stroke->width,
+                                   .h = stroke->width };
 
-                SDL_RenderTexture(r, t, NULL, &rect);
+                SDL_RenderTexture(rend, tex, NULL, &rect);
         }
 }
 
@@ -577,7 +522,7 @@ static void render(App *app)
         // draw all the past strokes
         for (int i = 0; i < app->stroke_list.count; i++) {
                 draw_stroke(app->renderer, 
-                                   app->circle_texture, 
+                                   app->circle_brush_texture, 
                                    &app->stroke_list.data[i], 
                                    app->pool.points,
                                    app->position_offset);
@@ -588,7 +533,7 @@ static void render(App *app)
                 Stroke live = app->current_stroke;
                 live.length = app->pool.count - live.start;
                 draw_stroke(app->renderer, 
-                                   app->circle_texture, 
+                                   app->circle_brush_texture, 
                                    &live, 
                                    app->pool.points,
                                    app->position_offset);
@@ -599,11 +544,13 @@ static void render(App *app)
 
 int main(int argc, char *argv[])
 {
+        // initialize SDL
         if (!SDL_Init(SDL_INIT_VIDEO)) {
                 fprintf(stderr, "%s\n", SDL_GetError());
                 return 1;
         }
 
+        // set up SDL Window
         SDL_WindowFlags window_flags = SDL_WINDOW_RESIZABLE;
         SDL_Window *window = SDL_CreateWindow("draw", 1920, 1080, window_flags);
         if (window == NULL) {
@@ -611,40 +558,55 @@ int main(int argc, char *argv[])
                 return 1;
         }
 
+        // set up SDL Renderer 
         SDL_Renderer *renderer = SDL_CreateRenderer(window, NULL);
         if (renderer == NULL) {
                 fprintf(stderr, "%s\n", SDL_GetError());
                 return 1;
         }
 
+        // disable vsync
         if (!SDL_SetRenderVSync(renderer, SDL_RENDERER_VSYNC_DISABLED)) {
                 fprintf(stderr, "%s\n", SDL_GetError());
-        }
-
-        App app;
-        if (!app_init(&app)) {
-                // print err
-                fprintf(stderr, "app_init failed! Exiting..\n");
                 return 1;
         }
 
-        // should probably organize this somewhere else
-        SDL_Surface *surf = create_surface_circle(app.brush_color);
-        SDL_Texture *circle_texture = SDL_CreateTextureFromSurface(renderer, surf);
-        SDL_SetTextureScaleMode(circle_texture, SDL_SCALEMODE_LINEAR);
-        SDL_SetTextureBlendMode(circle_texture, SDL_BLENDMODE_BLEND);
-        SDL_DestroySurface(surf);
+        // set up circle brush texture from surface
+        SDL_Surface *circle_brush_surf = 
+                SDL_CreateSurface(512, 512, SDL_PIXELFORMAT_RGBA32);
+        if (!circle_brush_surf) {
+                fprintf(stderr, "%s\n", SDL_GetError());
+                return 1;
+        }
+        if (!rasterize_circle(circle_brush_surf)) {
+                fprintf(stderr, "Failed to rasterize circle onto surface\n");
+                return 1;
+        }
+        SDL_Texture *circle_brush_texture = 
+                SDL_CreateTextureFromSurface(renderer, circle_brush_surf);
+        if (!circle_brush_texture) {
+                fprintf(stderr, "%s\n", SDL_GetError());
+                return 1;
+        }
+        SDL_SetTextureScaleMode(circle_brush_texture, SDL_SCALEMODE_LINEAR);
+        SDL_SetTextureBlendMode(circle_brush_texture, SDL_BLENDMODE_BLEND);
+        SDL_DestroySurface(circle_brush_surf);
 
+        // set up application states
+        App app;
+        if (!app_init(&app)) {
+                fprintf(stderr, "Failed to initialize application states!\n");
+                return 1;
+        }
         app.renderer = renderer;
-        app.circle_texture = circle_texture;
-
+        app.circle_brush_texture = circle_brush_texture;
         SDL_GetWindowSize(window, &app.window_size.x, &app.window_size.y);
+
         fprintf(stderr, "window_size.x: %d, window_size.y: %d\n", app.window_size.x, app.window_size.y);
 
         SDL_Event event;
         SDL_SetEventEnabled(SDL_EVENT_PEN_BUTTON_DOWN, false);
         SDL_SetEventEnabled(SDL_EVENT_PEN_BUTTON_UP, false);
-
         while (app.running) {
                 if (app.focused) {
                         while (SDL_PollEvent(&event)) {
@@ -655,18 +617,9 @@ int main(int argc, char *argv[])
                         handle_event(&event, &app);
                 }
                 if (app.redraw) {
-                        /*
-                        static int redraw_count = 0;
-                        fprintf(stderr, "%i: re-drawing...\n", redraw_count++);
-                        fprintf(stderr, "pool count: %i\n", app.pool.count);
-                        fprintf(stderr, "pool cap  : %i\n", app.pool.cap);
-                        fprintf(stderr, "app.current_stroke.width: %f\n", app.current_stroke.width);
-                        fprintf(stderr, "pan offset: (%f, %f)\n", app.offset.x, app.offset.y);
-                        */
                         render(&app);
                         app.redraw = false;
                 }
         }
-
         return 0;
 }
