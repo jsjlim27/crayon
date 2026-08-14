@@ -1,5 +1,7 @@
 # crayon
 
+https://github.com/user-attachments/assets/8bcbdc80-6cfe-4efa-b948-e219e2a11b78
+
 A freehand drawing application written in C on SDL3, with no engine or framework underneath it.
 
 The goal is a fast, minimal canvas where every layer — input handling, brush rasterization, stroke storage, undo — is written explicitly rather than inherited from a toolkit.
